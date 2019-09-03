@@ -1,0 +1,327 @@
+---
+title: "Tidy Template"
+author: "Fabio Votta"
+date: "The Date"
+output: html_document
+---
+
+
+# Packages and Folders
+
+```{r}
+# Install these packages if you don't have them yet
+# if (!require("pacman")) install.packages("pacman")
+# devtools::install_github("favstats/tidytemplate")
+
+pacman::p_load(tidyverse, tidytemplate, stringi)
+
+# Creates folders
+# tidytemplate::data_dir()
+# tidytemplate::images_dir()
+```
+
+## Functions
+
+### Create AT Requestios
+
+```{r}
+create_at_request <- function(x, type) {
+  if (x %in% c("OMID", "AccessCode", "AssessmentVersion", "AssessmentsDone", paste0("D", 1:8))) {
+    final_string <- glue::glue('"<<x>>" -> "{<<x>>}"', .open = "<<", .close = ">>")
+    return(final_string)
+  }
+  if (type=="Pre") {
+    if (str_detect(str_sub(x, -3), "Pre")) {
+      final_string <- glue::glue('"<<x>>" -> "{<<x>>}"', .open = "<<", .close = ">>")
+    }
+    if (!str_detect(str_sub(x, -3), "Pre")) {
+      final_string <- glue::glue('"<<x>>" -> "(not asked yet)"', .open = "<<", .close = ">>")
+    }
+    return(final_string)
+  }
+  if (type=="Post") {
+    if (str_detect(x, "Post") | str_detect(str_sub(x, -3), "Pre")) {
+      final_string <- glue::glue('"<<x>>" -> "{<<x>>}"', .open = "<<", .close = ">>")
+    }
+    if (!(str_detect(x, "Post") | str_detect(str_sub(x, -3), "Pre"))) {
+      final_string <- glue::glue('"<<x>>" -> "(not asked yet)"', .open = "<<", .close = ">>")
+    }
+    return(final_string)
+  }
+  if (type=="Sep") {
+    if (str_detect(x, "Sep")) {
+      final_string <- glue::glue('"<<x>>" -> "{<<x>>}"', .open = "<<", .close = ">>")
+    }
+    if (!str_detect(x, "Sep")) {
+      final_string <- glue::glue('"<<x>>" -> "(not asked yet)"', .open = "<<", .close = ">>")
+    }
+    return(final_string)
+  }
+  if (type=="Oct") {
+    if (str_detect(x, "Sep|Oct")) {
+      # x_internal <- str_remove(x, "Sep")
+      final_string <- glue::glue('"<<x>>" -> "{<<x>>}"', .open = "<<", .close = ">>")
+    }
+    if (!str_detect(x, "Sep|Oct")) {
+      final_string <- glue::glue('"<<x>>" -> "(not asked yet)"', .open = "<<", .close = ">>")
+    }
+    return(final_string)
+  }
+  if (type=="Nov") {
+    if (str_detect(x, "Sep|Oct|Nov")) {
+      # x_internal <- str_remove(x, "Sep")
+      final_string <- glue::glue('"<<x>>" -> "{<<x>>}"', .open = "<<", .close = ">>")
+    }
+    if (!str_detect(x, "Sep|Oct|Nov")) {
+      final_string <- glue::glue('"<<x>>" -> "(not asked yet)"', .open = "<<", .close = ">>")
+    }
+    return(final_string)
+  }
+  if (type %in% c("FollowUp", "Dec", "same")) {
+    final_string <- glue::glue('"<<x>>" -> "{<<x>>}"', .open = "<<", .close = ">>")
+    return(final_string)
+  }
+}
+
+request_strings <- function(x) {
+  glue::glue('*send: { "fields" -> { <<x>>  } }', .open = "<<", .close = ">>")
+}
+```
+
+### Create GT AT Vars
+
+
+```{r}
+create_GT_AT_vars <- function(x){
+  glue::glue('>>{x}=retrieved[1]["fields"]["{x}"]')
+}
+````
+
+# AssessmentV6 Template Stuff
+
+```{r, data}
+
+dat.ass6 <- read_csv("data/AssessmentV6-Grid view.csv")
+
+PreStrings <- dat.ass6 %>% 
+  colnames() %>% 
+  .[str_detect(., "Pre")] %>% 
+  .[!str_detect(., "Post|FollowUp")]
+
+FixStrings <- dat.ass6 %>% 
+  colnames() %>% 
+  .[!str_detect(., "Pre|Post|FollowUp")]
+
+PostStrings <- PreStrings %>% 
+  stri_replace_last_fixed(., "Pre", "Post")
+
+FollowUpStrings <- PreStrings %>% 
+  stri_replace_last_fixed(., "Pre", "FollowUp")
+
+tibble(c(FixStrings, PreStrings, PostStrings, FollowUpStrings)) %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  mutate_all(as.character) -> Scribble
+
+AssessmentTemplate <- bind_rows(Scribble, Scribble) %>% 
+  janitor::row_to_names(1)
+
+write_csv(AssessmentTemplate, path = "data/AssessmentTemplate.csv")
+
+```
+
+## Create AT Request
+
+
+### Pre
+
+```{r}
+colnames(AssessmentTemplate) %>% 
+  map_chr(~create_at_request(.x, "Pre")) %>% 
+  glue::glue_collapse(sep=", ") %>% 
+  request_strings() %>% 
+  cat()
+```
+
+### Post
+
+```{r}
+colnames(AssessmentTemplate) %>% 
+  map_chr(~create_at_request(.x, "Post")) %>% 
+  glue::glue_collapse(sep=", ") %>% 
+  request_strings() %>% 
+  cat()
+```
+
+### FollowUp
+
+```{r}
+colnames(AssessmentTemplate) %>% 
+  map_chr(~create_at_request(.x, "FollowUp")) %>% 
+  glue::glue_collapse(sep=", ") %>% 
+  request_strings() %>% 
+  cat()
+```
+
+
+
+## Create GT AT Vars
+
+### Pre
+
+```{r}
+PreStrings %>% 
+  map_chr(~create_GT_AT_vars(.x)) %>% 
+  glue::glue_collapse(sep="\n") %>% 
+  cat()
+```
+
+### Post
+
+```{r}
+PostStrings %>% 
+  map_chr(~create_GT_AT_vars(.x)) %>% 
+  glue::glue_collapse(sep="\n") %>% 
+  cat()
+```
+
+### FollowUp
+
+```{r}
+FollowUpStrings %>% 
+  map_chr(~create_GT_AT_vars(.x)) %>% 
+  glue::glue_collapse(sep="\n") %>% 
+  cat()
+```
+
+
+# AssessmentV6 DiD Template
+
+
+```{r}
+PreStrings <- dat.ass6 %>% 
+  colnames() %>% 
+  .[str_detect(., "Pre")] %>% 
+  .[!str_detect(., "Post|FollowUp")]
+
+SepStrings <- dat.ass6 %>% 
+  colnames() %>% 
+  .[str_detect(., "Pre")] %>% 
+  .[!str_detect(., "Post|FollowUp")] %>% 
+  stri_replace_last_fixed(., "Pre", "Sep")
+
+# stringi::stri_extract_last("PrepasdredPost", fixed = "Pre")
+# 
+# str_sub("PrepasdredPost",-6,-1)
+
+
+OctStrings <- SepStrings %>% 
+  stri_replace_last_fixed(., "Sep", "Oct")
+
+NovStrings <- SepStrings %>% 
+  stri_replace_last_fixed(., "Sep", "Nov")
+
+DecStrings <- SepStrings %>% 
+  stri_replace_last_fixed(., "Sep", "Dec")
+
+
+tibble(c(FixStrings, SepStrings, OctStrings, NovStrings, DecStrings)) %>% 
+  t() %>% 
+  as.data.frame() %>% 
+  mutate_all(as.character) -> Scribble
+
+AssessmentTemplateDiD <- bind_rows(Scribble, Scribble) %>% 
+  janitor::row_to_names(1)
+
+write_csv(AssessmentTemplateDiD, path = "data/AssessmentTemplateDiD.csv")
+```
+
+
+## Create AT Request
+
+
+### Sep
+
+```{r}
+colnames(AssessmentTemplateDiD) %>% 
+  map_chr(~create_at_request(.x, "Sep")) %>% 
+  glue::glue_collapse(sep=", ") %>% 
+  request_strings() %>% 
+  cat()
+```
+
+### Oct
+
+```{r}
+colnames(AssessmentTemplateDiD) %>% 
+  map_chr(~create_at_request(.x, "Oct")) %>% 
+  glue::glue_collapse(sep=", ") %>% 
+  request_strings() %>% 
+  cat()
+```
+
+### Nov
+
+```{r}
+colnames(AssessmentTemplateDiD) %>% 
+  map_chr(~create_at_request(.x, "Nov")) %>% 
+  glue::glue_collapse(sep=", ") %>% 
+  request_strings() %>% 
+  cat()
+```
+
+### Dec
+
+```{r}
+colnames(AssessmentTemplateDiD) %>% 
+  map_chr(~create_at_request(.x, "Dec")) %>% 
+  glue::glue_collapse(sep=", ") %>% 
+  request_strings() %>% 
+  cat()
+```
+
+
+
+
+## Create GT AT Vars
+
+### Sep
+
+```{r}
+SepStrings %>% 
+  map_chr(~create_GT_AT_vars(.x)) %>% 
+  glue::glue_collapse(sep="\n") %>% 
+  cat()
+```
+
+### Oct
+
+```{r}
+OctStrings %>% 
+  map_chr(~create_GT_AT_vars(.x)) %>% 
+  glue::glue_collapse(sep="\n") %>% 
+  cat()
+```
+
+### Nov
+
+```{r}
+NovStrings %>% 
+  map_chr(~create_GT_AT_vars(.x)) %>% 
+  glue::glue_collapse(sep="\n") %>% 
+  cat()
+```
+
+
+### Dec
+
+```{r}
+DecStrings %>% 
+  map_chr(~create_GT_AT_vars(.x)) %>% 
+  glue::glue_collapse(sep="\n") %>% 
+  cat()
+
+```
+
+
+
