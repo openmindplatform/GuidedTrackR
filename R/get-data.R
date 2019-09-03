@@ -67,6 +67,15 @@ gt_login <- function(remDr, login, password) {
 }
 
 
+#'
+#'
+#' @export
+gt_navigate <- function(remDr, program_id) {
+  url <- stringr::str_glue("https://www.guidedtrack.com/programs/{program_id}/edit")
+  remDr$navigate(url)
+}
+
+
 
 #'
 #'
